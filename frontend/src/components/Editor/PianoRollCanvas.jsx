@@ -298,7 +298,8 @@ function PianoRollCanvas({ midiData, audioRef, offset }) {
       ref={canvasRef}
       style={{
         width: "100%",
-        height: "500px",
+        flex:1,
+        minHeight:0,
         border: "1px solid #333",
         marginTop: "20px",
       }}

@@ -4,12 +4,13 @@ function Toolbar({
   audioRef,
   offset,
   speed,
-  nudgeOffset,
-  nudgeSpeed,
+  setOffset,
+  setSpeed,
 }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const closeTimeout = useRef(null);
+  const [volume, setVolume] = useState(1);
 
   // sync play state properly
   useEffect(() => {
@@ -98,7 +99,7 @@ function Toolbar({
                   step="0.05"
                   value={speed}
                   onChange={(e) =>
-                    nudgeSpeed(Number(e.target.value) - speed)
+                    setSpeed(Number(e.target.value))
                   }
                 />
                 <div className="value">{speed.toFixed(2)}x</div>
@@ -127,7 +128,7 @@ function Toolbar({
                   step="0.1"
                   value={offset}
                   onChange={(e) =>
-                    nudgeOffset(Number(e.target.value) - offset)
+                    setOffset(Number(e.target.value))
                   }
                 />
                 <div className="value">{offset.toFixed(1)}s</div>
@@ -154,14 +155,20 @@ function Toolbar({
                     min="0"
                     max="1"
                     step="0.01"
-                    defaultValue={audioRef.current?.volume ?? 1}
-                    onChange={(e) => {
-                        if (!audioRef.current) return;
-                        audioRef.current.volume = Number(e.target.value);
+                    value={volume}
+                    onInput={(e)=>{
+                        const v = Number(e.target.value);
+
+                        setVolume(v);
+
+                        if(audioRef.current){
+                            audioRef.current.volume = v;
+                        }
                     }}
                 />
+
                 <div className="value">
-                    {Math.round((audioRef.current?.volume ?? 1) * 100)}%
+                    {Math.round(volume*100)}%
                 </div>
               </div>
             </div>

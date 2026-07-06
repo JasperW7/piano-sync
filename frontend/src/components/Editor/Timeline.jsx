@@ -1,19 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 function Timeline({ audioRef }) {
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const fillRef = useRef(null);
+  const thumbRef = useRef(null);
+  const currentLabelRef = useRef(null);
+  const durationLabelRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+  const timelineRef = useRef(null);
   useEffect(() => {
     let animationId;
 
     const update = () => {
-      if (audioRef.current) {
-        setCurrentTime(audioRef.current.currentTime || 0);
-        setDuration(audioRef.current.duration || 0);
-      }
 
-      animationId = requestAnimationFrame(update);
+    const audio = audioRef.current;
+
+        if(audio){
+
+            const current = audio.currentTime || 0;
+            const duration = audio.duration || 0;
+
+            const percent =
+                duration
+                ? current / duration * 100
+                : 0;
+
+            if (fillRef.current)
+                fillRef.current.style.width = `${percent}%`;
+
+            if (thumbRef.current)
+                thumbRef.current.style.left = `${percent}%`;
+
+            if (currentLabelRef.current)
+                currentLabelRef.current.textContent = formatTime(current);
+
+            if (durationLabelRef.current)
+                durationLabelRef.current.textContent = formatTime(duration);
+        }
+
+        animationId=requestAnimationFrame(update);
     };
 
     update();
@@ -21,8 +45,6 @@ function Timeline({ audioRef }) {
     return () => cancelAnimationFrame(animationId);
   }, [audioRef]);
 
-  const progress =
-    duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const formatTime = (time) => {
     if (!time || isNaN(time)) return "0:00";
@@ -32,55 +54,75 @@ function Timeline({ audioRef }) {
 
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
-  const seek = (e) => {
-    if (!audioRef.current || !duration) return;
+  const seek = (clientX) => {
+    if (!audioRef.current || !timelineRef.current) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
+    const rect = timelineRef.current.getBoundingClientRect();
 
-    audioRef.current.currentTime = percent * duration;
+    const percent = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width)
+    );
+
+    audioRef.current.currentTime =
+        percent * audioRef.current.duration;
   };
-  useEffect(() => {
-    const stopDrag = () => setIsDragging(false);
 
-    window.addEventListener("mouseup", stopDrag);
-    return () => window.removeEventListener("mouseup", stopDrag);
-    }, []);
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e) => {
+        e.preventDefault();
+        seek(e.clientX);
+    };
+
+    const handleUp = () => {
+        setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+
+    return () => {
+        window.removeEventListener("mousemove", handleMove);
+        window.removeEventListener("mouseup", handleUp);
+    };
+  }, [isDragging]);
+
 
   return (
     <div className="editor-timeline">
         <div
-        className="timeline-progress"
-        onMouseDown={(e) => {
-            setIsDragging(true);
-            seek(e);
-        }}
-        onMouseMove={(e) => {
-            if (!isDragging) return;
-            seek(e);
-        }}
-        onMouseUp={() => {
-            setIsDragging(false);
-        }}
-        onMouseLeave={() => {
-            setIsDragging(false);
-        }}
+            ref={timelineRef}
+            className="timeline-progress"
+            onMouseDown={(e) => {
+                setIsDragging(true);
+                seek(e.clientX);
+            }}
         >
         <div
+            className={`timeline-bar ${isDragging ? "dragging" : ""}`}
+        />   
+        <div
+          ref={fillRef}
           className="timeline-fill"
-          style={{ width: `${progress}%` }}
         />
 
         <div
+          ref={thumbRef}
           className="timeline-thumb"
-          style={{ left: `${progress}%` }}
         />
       </div>
-
       <div className="timeline-times">
-        <span>{formatTime(currentTime)}</span>
-        <span>{formatTime(duration)}</span>
-      </div>
+        <span ref={currentLabelRef}>
+            0:00
+        </span>
+
+        <span ref={durationLabelRef}>
+            0:00
+        </span>
+    </div>
+
     </div>
   );
 }

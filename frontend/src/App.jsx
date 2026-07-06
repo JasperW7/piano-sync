@@ -40,28 +40,27 @@ function App() {
     <div className="app">
 
       <Header />
+      <div className="workspace">
+        <UploadPanel
+          setMidiData={setMidiData}
+          setAudioUrl={setAudioUrl}
+        />
 
-      <UploadPanel
-        setMidiData={setMidiData}
-        setAudioUrl={setAudioUrl}
-      />
+        <div className="hidden-audio">
+          <audio ref={audioRef} src={audioUrl || ""} />
+        </div>
 
-      <audio
-        ref={audioRef}
-        src={audioUrl || ""}
-        style={{ display: "none" }}
+        <Editor
+          midiData={midiData}
+          audioRef={audioRef}
+          offset={offset}
+          speed={speed}
+          setOffset={setOffset}
+          setSpeed={setSpeed}
+          nudgeOffset={nudgeOffset}
+          nudgeSpeed={nudgeSpeed}
       />
-
-      <Editor
-        midiData={midiData}
-        audioRef={audioRef}
-        offset={offset}
-        speed={speed}
-        setOffset={setOffset}
-        setSpeed={setSpeed}
-        nudgeOffset={nudgeOffset}
-        nudgeSpeed={nudgeSpeed}
-      />
+      </div>
 
     </div>
   );

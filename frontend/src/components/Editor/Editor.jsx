@@ -17,21 +17,42 @@ function Editor({
   // Spacebar play/pause
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.code !== "Space") return;
+    // Ignore keyboard shortcuts while typing in inputs
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
 
-      // prevent space scrolling OR slider interference
-      const tag = e.target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (!audioRef.current) return;
 
-      if (!audioRef.current) return;
+    switch (e.code) {
+        case "Space":
+        e.preventDefault();
 
-      e.preventDefault();
+        if (audioRef.current.paused) {
+            audioRef.current.play();
+        } else {
+            audioRef.current.pause();
+        }
+        break;
 
-      if (audioRef.current.paused) {
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
+        case "ArrowLeft":
+        e.preventDefault();
+        audioRef.current.currentTime = Math.max(
+            0,
+            audioRef.current.currentTime - 5
+        );
+        break;
+
+        case "ArrowRight":
+        e.preventDefault();
+        audioRef.current.currentTime = Math.min(
+            audioRef.current.duration || 0,
+            audioRef.current.currentTime + 5
+        );
+        break;
+
+        default:
+        break;
+    }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -46,8 +67,8 @@ function Editor({
         audioRef={audioRef}
         offset={offset}
         speed={speed}
-        nudgeOffset={nudgeOffset}
-        nudgeSpeed={nudgeSpeed}
+        setOffset={setOffset}
+        setSpeed={setSpeed}
       />
 
       <Timeline audioRef={audioRef} />
