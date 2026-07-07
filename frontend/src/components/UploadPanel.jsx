@@ -11,29 +11,37 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
         const formData = new FormData();
         formData.append("file", file);
 
-        const endpoint =
-        type === "mp3"
-            ? "http://127.0.0.1:5000/upload/audio"
-            : "http://127.0.0.1:5000/parse/midi";
+        let endpoint;
+
+        if (type === "mp3") {
+          endpoint = "http://127.0.0.1:5000/upload/audio";
+        }
+        else if (type === "midi") {
+          endpoint = "http://127.0.0.1:5000/parse/midi";
+        }
+        else {
+          endpoint = "http://127.0.0.1:5000/parse/pdf";
+        }
 
         const res = await axios.post(endpoint, formData);
 
-        if (type === "midi") {
-        setMidiData(res.data.notes);
-        setMidiName(file.name)
-        } else {
-        setAudioUrl(URL.createObjectURL(file));
-        setMp3Name(file.name)
+        if (type === "mp3") {
+            setAudioUrl(URL.createObjectURL(file));
+            setMp3Name(file.name);
+        }
+        // else {
+        //     setMidiData(res.data.notes);
+        //     setMidiName(file.name);
+        // }
+        else {
+            console.log("PDF/MIDI response:", res.data);
+
+            setMidiData(res.data.notes);
+            setMidiName(file.name);
         }
 
     } catch (err) {
-        console.error("Upload failed:", err);
-
-        if (type === "midi") {
-        setMidiStatus("Upload failed ❌");
-        } else {
-        setMp3Status("Upload failed ❌");
-        }
+        console.error(err);
     }
   };
 
@@ -76,7 +84,12 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           hidden
           onChange={(e) => {
             const file = e.target.files[0];
-            if (file) uploadFile(file, file.name.endsWith(".pdf") ? "pdf" : "midi");
+
+            if (!file) return;
+
+            const isPdf = file.name.toLowerCase().endsWith(".pdf");
+
+            uploadFile(file, isPdf ? "pdf" : "midi");
           }}
         />
 
@@ -84,7 +97,7 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
         {midiName ? "🎹 " + midiName : "🎹 MIDI File"}
         </div>
         <div className="upload-sub">
-        {midiName ? "Loaded" : "Click to load MIDI"}
+        {midiName ? "Loaded" : "Click to load PDF (beta) or MIDI"}
         </div>
       </div>
 
