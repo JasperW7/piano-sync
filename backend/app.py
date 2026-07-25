@@ -3,11 +3,9 @@ from flask import Flask, request, jsonify # type: ignore
 from flask_cors import CORS # type: ignore
 import uuid
 import pretty_midi
-import subprocess
-import shutil
 import requests
 import lyricsgenius
-from music21 import converter
+# from music21 import converter
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,15 +13,10 @@ AUDD_API_KEY = os.getenv("AUDD_API_KEY")
 GENIUS_TOKEN = os.getenv("GENIUS_TOKEN")
 app = Flask(__name__)
 CORS(app)
-AUDIVERIS = r"C:\Users\jaspe\audiveris\Audiveris.exe"
 UPLOAD_FOLDER = "uploads"
-PDF_FOLDER = os.path.join(UPLOAD_FOLDER, "pdf")
 MIDI_FOLDER = os.path.join(UPLOAD_FOLDER, "midi")
-PROCESSED_FOLDER = "processed"
-
-os.makedirs(PDF_FOLDER, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MIDI_FOLDER, exist_ok=True)
-os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 genius = lyricsgenius.Genius(
     GENIUS_TOKEN,
@@ -117,6 +110,7 @@ def parse_midi(file_path):
 
 @app.route("/parse/midi", methods=["POST"])
 def parse_midi_route():
+    
     file = request.files["file"]
 
     filename = f"{uuid.uuid4().hex}.mid"
@@ -128,94 +122,13 @@ def parse_midi_route():
     return jsonify({
         "notes": notes
     })
+
 @app.route("/parse/pdf", methods=["POST"])
 def parse_pdf():
-
-    file = request.files["file"]
-
-    print("PDF RECEIVED:", file.filename)
-
-    pdf_path = os.path.join(PDF_FOLDER, file.filename)
-    file.save(pdf_path)
-
-    print("SAVED PDF:", pdf_path)
-
-    output_dir = os.path.join(PROCESSED_FOLDER, uuid.uuid4().hex)
-    os.makedirs(output_dir, exist_ok=True)
-
-    print("RUNNING AUDIVERIS...")
-
-    result = subprocess.run(
-        [
-            AUDIVERIS,
-            "-batch",
-            "-transcribe",
-            "-export",
-            "-output",
-            output_dir,
-            pdf_path
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        timeout=120,
-        creationflags=subprocess.CREATE_NO_WINDOW
-    )
-
-    print("AUDIVERIS FINISHED")
-    print("RETURN CODE:", result.returncode)
-    print(result.stdout)
-    print(result.stderr)
-
-
-    print("SEARCHING OUTPUT:", output_dir)
-
-    mxl_file = None
-
-    for root, dirs, files in os.walk(output_dir):
-        print("CHECKING:", root, files)
-
-        for f in files:
-            if f.lower().endswith(".mxl"):
-                mxl_file = os.path.join(root, f)
-
-
-    if mxl_file is None:
-        print("NO MUSICXML FOUND")
-        return jsonify({
-            "error": "No MusicXML generated"
-        }), 400
-
-
-    print("FOUND MUSICXML:", mxl_file)
-
-
-    print("CONVERTING MUSICXML TO MIDI")
-
-    score = converter.parse(mxl_file)
-
-    midi_path = os.path.join(
-        output_dir,
-        "converted.mid"
-    )
-
-    score.write(
-        "midi",
-        fp=midi_path
-    )
-
-    print("CREATED MIDI:", midi_path)
-
-
-    notes = parse_midi(midi_path)
-
-    print("NOTES GENERATED:", len(notes))
-    print(notes[:5])
-
     return jsonify({
-        "notes": notes
-    })
-    
+        "error": "PDF parsing is temporarily unavailable in the online version."
+    }), 501
+
 @app.route("/identify-song", methods=["POST"])
 def identify_song():
 
@@ -274,4 +187,7 @@ def get_lyrics():
         "lyrics": song.lyrics
     })
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000))
+    )
