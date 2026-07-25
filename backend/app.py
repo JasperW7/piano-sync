@@ -5,8 +5,14 @@ import uuid
 import pretty_midi
 import subprocess
 import shutil
+import requests
+import lyricsgenius
 from music21 import converter
+from dotenv import load_dotenv
+load_dotenv()
 
+AUDD_API_KEY = os.getenv("AUDD_API_KEY")
+GENIUS_TOKEN = os.getenv("GENIUS_TOKEN")
 app = Flask(__name__)
 CORS(app)
 AUDIVERIS = r"C:\Users\jaspe\audiveris\Audiveris.exe"
@@ -18,6 +24,12 @@ PROCESSED_FOLDER = "processed"
 os.makedirs(PDF_FOLDER, exist_ok=True)
 os.makedirs(MIDI_FOLDER, exist_ok=True)
 os.makedirs(PROCESSED_FOLDER, exist_ok=True)
+
+genius = lyricsgenius.Genius(
+    GENIUS_TOKEN,
+    skip_non_songs=True,
+    excluded_terms=["(Remix)", "(Live)"]
+)
 
 @app.route("/")
 def home():
@@ -202,6 +214,64 @@ def parse_pdf():
 
     return jsonify({
         "notes": notes
+    })
+    
+@app.route("/identify-song", methods=["POST"])
+def identify_song():
+
+    file = request.files["file"]
+
+    response = requests.post(
+        "https://api.audd.io/",
+        data={
+            "api_token": AUDD_API_KEY,
+            "return": "apple_music,spotify"
+        },
+        files={
+            "file": (
+                file.filename,
+                file.stream,
+                file.mimetype
+            )
+        }
+    )
+
+    return jsonify(response.json())
+
+@app.route("/lyrics", methods=["POST"])
+def get_lyrics():
+
+    data = request.json
+
+    title = data["title"]
+    artist = data["artist"]
+
+    print("Searching Genius:")
+    print(title)
+    print(artist)
+
+    song = genius.search_song(
+        title,
+        artist,
+        get_full_info=True
+    )
+
+    if song is None:
+        return jsonify({
+            "error": "Lyrics not found"
+        }), 404
+
+
+    if artist.lower() not in song.artist.lower():
+        return jsonify({
+            "error": "Wrong artist match",
+            "found": song.artist
+        }), 404
+
+    return jsonify({
+        "title": song.title,
+        "artist": song.artist,
+        "lyrics": song.lyrics
     })
 if __name__ == "__main__":
     app.run(debug=True)

@@ -44,6 +44,17 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
         console.error(err);
     }
   };
+  const identifySong = async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await axios.post(
+          "http://127.0.0.1:5000/identify-song",
+          formData
+      );
+
+      console.log(res.data);
+  };
 
   return (
     <div className="upload-panel">
@@ -60,7 +71,10 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           hidden
           onChange={(e) => {
             const file = e.target.files[0];
-            if (file) uploadFile(file, "mp3");
+            if (file) {
+              uploadFile(file, "mp3");
+              identifySong(file);
+            }
           }}
         />
 
