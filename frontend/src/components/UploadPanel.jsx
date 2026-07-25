@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useState } from "react";
-
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 function UploadPanel({ setMidiData, setAudioUrl }) {
   const [status, setStatus] = useState("");
   const [mp3Name, setMp3Name] = useState("");
@@ -14,13 +14,13 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
         let endpoint;
 
         if (type === "mp3") {
-          endpoint = "http://127.0.0.1:5000/upload/audio";
+          endpoint = `${API}/upload/audio`;
         }
         else if (type === "midi") {
-          endpoint = "http://127.0.0.1:5000/parse/midi";
+          endpoint = `${API}/parse/midi`;
         }
         else {
-          endpoint = "http://127.0.0.1:5000/parse/pdf";
+          endpoint = `${API}/parse/pdf`;
         }
 
         const res = await axios.post(endpoint, formData);
@@ -49,7 +49,7 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
       formData.append("file", file);
 
       const res = await axios.post(
-          "http://127.0.0.1:5000/identify-song",
+          `${API}/identify-song`,
           formData
       );
 
