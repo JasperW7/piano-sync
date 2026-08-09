@@ -2,7 +2,6 @@ import axios from "axios";
 import { useState } from "react";
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 function UploadPanel({ setMidiData, setAudioUrl }) {
-  const [status, setStatus] = useState("");
   const [mp3Name, setMp3Name] = useState("");
   const [midiName, setMidiName] = useState("");
 
@@ -29,10 +28,6 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
             setAudioUrl(URL.createObjectURL(file));
             setMp3Name(file.name);
         }
-        // else {
-        //     setMidiData(res.data.notes);
-        //     setMidiName(file.name);
-        // }
         else {
             console.log("PDF/MIDI response:", res.data);
 
@@ -57,12 +52,14 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
   };
 
   return (
-    <div className="upload-panel">
+    <div className="upload-panel-inline">
 
       {/* MP3 */}
-      <div
-        className={`upload-dropzone ${mp3Name ? "loaded" : ""}`}
+      <button
+        type="button"
+        className={`upload-chip ${mp3Name ? "loaded" : ""}`}
         onClick={() => document.getElementById("mp3-input").click()}
+        title={mp3Name || "Load MP3"}
       >
         <input
           id="mp3-input"
@@ -78,18 +75,18 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           }}
         />
 
-        <div className="upload-title" title={mp3Name}>
-        {mp3Name ? "🎵 " + mp3Name : "🎵 Audio Track"}
-        </div>
-        <div className="upload-sub">
-        {mp3Name ? "Loaded" : "Click to load MP3"}
-        </div>
-      </div>
+        <span className="upload-chip-icon">🎵</span>
+        <span className="upload-chip-label">
+          {mp3Name || "Audio Track"}
+        </span>
+      </button>
 
       {/* MIDI */}
-      <div
-        className={`upload-dropzone ${midiName ? "loaded" : ""}`}
+      <button
+        type="button"
+        className={`upload-chip ${midiName ? "loaded" : ""}`}
         onClick={() => document.getElementById("midi-input").click()}
+        title={midiName || "Load MIDI or PDF (beta)"}
       >
         <input
           id="midi-input"
@@ -107,13 +104,11 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           }}
         />
 
-        <div className="upload-title" title={midiName}>
-        {midiName ? "🎹 " + midiName : "🎹 MIDI File"}
-        </div>
-        <div className="upload-sub">
-        {midiName ? "Loaded" : "Click to load PDF (beta) or MIDI"}
-        </div>
-      </div>
+        <span className="upload-chip-icon">🎹</span>
+        <span className="upload-chip-label">
+          {midiName || "MIDI File"}
+        </span>
+      </button>
 
     </div>
   );

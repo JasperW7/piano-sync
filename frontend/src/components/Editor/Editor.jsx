@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 
-import Toolbar from "./Toolbar";
 import PianoRollCanvas from "./PianoRollCanvas";
-import Timeline from "./Timeline";
+import TransportBar from "./TransportBar";
 
 function Editor({
   midiData,
@@ -11,8 +10,6 @@ function Editor({
   speed,
   setOffset,
   setSpeed,
-  nudgeOffset,
-  nudgeSpeed,
 }) {
   // Spacebar play/pause
   useEffect(() => {
@@ -63,20 +60,20 @@ function Editor({
   return (
     <div className="editor">
 
-      <Toolbar
+      <div className="piano-roll-container">
+        <PianoRollCanvas
+          midiData={midiData}
+          audioRef={audioRef}
+          offset={offset}
+        />
+      </div>
+
+      <TransportBar
         audioRef={audioRef}
         offset={offset}
         speed={speed}
         setOffset={setOffset}
         setSpeed={setSpeed}
-      />
-
-      <Timeline audioRef={audioRef} />
-
-      <PianoRollCanvas
-        midiData={midiData}
-        audioRef={audioRef}
-        offset={offset}
       />
 
     </div>

@@ -3,7 +3,6 @@ import "./App.css";
 import { useState, useRef, useEffect } from "react";
 
 import Header from "./components/Header";
-import UploadPanel from "./components/UploadPanel";
 import Editor from "./components/Editor/Editor";
 
 function App() {
@@ -39,13 +38,12 @@ function App() {
   return (
     <div className="app">
 
-      <Header />
-      <div className="workspace">
-        <UploadPanel
-          setMidiData={setMidiData}
-          setAudioUrl={setAudioUrl}
-        />
+      <Header
+        setMidiData={setMidiData}
+        setAudioUrl={setAudioUrl}
+      />
 
+      <div className="workspace">
         <div className="hidden-audio">
           <audio ref={audioRef} src={audioUrl || ""} />
         </div>

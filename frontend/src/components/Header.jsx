@@ -1,11 +1,14 @@
-function Header() {
+import UploadPanel from "./UploadPanel";
+
+function Header({ setMidiData, setAudioUrl }) {
   return (
     <div className="app-header">
       <div className="logo">Piano Sync</div>
 
-      <div className="header-right">
-        {/* future: project name, settings, etc */}
-      </div>
+      <UploadPanel
+        setMidiData={setMidiData}
+        setAudioUrl={setAudioUrl}
+      />
     </div>
   );
 }
