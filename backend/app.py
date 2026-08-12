@@ -1,23 +1,15 @@
 import os
 import uuid
-import time
-import hmac
-import hashlib
-import base64
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pretty_midi
-import requests
+import acoustid
 from lyrics import get_lyrics as fetch_lyrics
+from align_lyrics import align_lyrics_to_audio
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# ── ACRCloud config ──
-ACR_HOST = os.getenv("ACR_HOST")          # e.g. identify-us-west-2.acrcloud.com
-ACR_ACCESS_KEY = os.getenv("ACR_ACCESS_KEY")
-ACR_ACCESS_SECRET = os.getenv("ACR_ACCESS_SECRET")
 
 app = Flask(__name__)
 CORS(app)
@@ -113,85 +105,47 @@ def parse_pdf():
     }), 501
 
 
-# ── ACRCloud signature helper ──
-def _acr_sign(method, endpoint, access_key, data_type, signature_version, timestamp, access_secret):
-    string_to_sign = (
-        f"{method}\n{endpoint}\n{access_key}\n{data_type}\n{signature_version}\n{timestamp}"
-    )
-    sign = hmac.new(
-        access_secret.encode("utf-8"),
-        string_to_sign.encode("utf-8"),
-        hashlib.sha1
-    ).digest()
-    return base64.b64encode(sign).decode("utf-8")
+# ── Song identification (AcoustID + MusicBrainz) ──
+ACOUSTID_API_KEY = os.getenv("ACOUSTID_API_KEY")
+FPCALC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fpcalc.exe")
+os.environ["FPCALC"] = FPCALC_PATH
 
 
-# ── Song identification (ACRCloud) ──
 @app.route("/identify-song", methods=["POST"])
 def identify_song():
-    if not all([ACR_HOST, ACR_ACCESS_KEY, ACR_ACCESS_SECRET]):
-        return jsonify({"error": "ACRCloud credentials not configured"}), 500
+    if not ACOUSTID_API_KEY:
+        return jsonify({"error": "ACOUSTID_API_KEY not configured"}), 500
 
     file = request.files["file"]
-    file_bytes = file.read()
-
-    method = "POST"
-    endpoint = "/v1/identify"
-    data_type = "audio"
-    signature_version = "1"
-    timestamp = str(int(time.time()))
-
-    signature = _acr_sign(
-        method, endpoint, ACR_ACCESS_KEY, data_type,
-        signature_version, timestamp, ACR_ACCESS_SECRET
-    )
-
-    url = f"https://{ACR_HOST}{endpoint}"
-
-    data = {
-        "access_key": ACR_ACCESS_KEY,
-        "sample_bytes": len(file_bytes),
-        "timestamp": timestamp,
-        "signature": signature,
-        "data_type": data_type,
-        "signature_version": signature_version,
-    }
-
-    files = {"sample": ("sample", file_bytes, file.mimetype or "audio/mpeg")}
+    filename = f"identify_{uuid.uuid4().hex}.mp3"
+    path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(path)
 
     try:
-        response = requests.post(url, data=data, files=files, timeout=30)
-        result = response.json()
-    except Exception as e:
-        return jsonify({"error": f"ACRCloud request failed: {str(e)}"}), 500
+        results = acoustid.match(
+            ACOUSTID_API_KEY, path,
+            meta=["recordings", "releasegroups"],
+            force_fpcalc=True,
+        )
 
-    # Normalize response
-    status = result.get("status", {})
-    if status.get("code") != 0:
-        return jsonify({
-            "error": status.get("msg", "Recognition failed"),
-            "raw": result
-        }), 404
+        for score, recording_id, title, artist in results:
+            if score < 0.5:
+                continue
+            return jsonify({
+                "title": title or "",
+                "artist": artist or "",
+                "score": round(score, 3),
+                "recording_id": recording_id,
+            })
 
-    metadata = result.get("metadata", {})
-    music_list = metadata.get("music", [])
-    if not music_list:
-        return jsonify({"error": "No match found", "raw": result}), 404
+        return jsonify({"error": "No match found"}), 404
 
-    track = music_list[0]
-    artists = track.get("artists", [])
-    genres = track.get("genres", [])
-
-    return jsonify({
-        "title": track.get("title", ""),
-        "artist": artists[0].get("name", "") if artists else "",
-        "album": track.get("album", {}).get("name", ""),
-        "release_date": track.get("release_date", ""),
-        "label": track.get("label", ""),
-        "genre": genres[0].get("name", "") if genres else "",
-        "acrid": track.get("acrid", ""),
-        "raw": result
-    })
+    except acoustid.FingerprintGenerationError as e:
+        return jsonify({"error": f"Fingerprint failed: {str(e)}"}), 500
+    except acoustid.WebServiceError as e:
+        return jsonify({"error": f"AcoustID lookup failed: {str(e)}"}), 500
+    finally:
+        os.remove(path)
 
 
 # ── Lyrics (unchanged) ──
@@ -211,6 +165,40 @@ def get_lyrics_route():
         "title": title,
         "artist": artist,
         "lyrics": lyrics
+    })
+
+
+# ── Synced lyrics (Whisper alignment) ──
+@app.route("/lyrics/synced", methods=["POST"])
+def get_synced_lyrics():
+    data = request.json
+    title = data.get("title")
+    artist = data.get("artist")
+    audio_file = data.get("audio_file")
+
+    if not audio_file:
+        return jsonify({"error": "audio_file is required"}), 400
+
+    audio_path = os.path.join(UPLOAD_FOLDER, audio_file)
+    if not os.path.exists(audio_path):
+        return jsonify({"error": "Audio file not found"}), 404
+
+    if not title or not artist:
+        return jsonify({"error": "title and artist are required"}), 400
+
+    print(f"Fetching synced lyrics for: {title} — {artist}")
+    lyrics = fetch_lyrics(title, artist)
+
+    if lyrics is None:
+        return jsonify({"error": "Lyrics not found"}), 404
+
+    print(f"Aligning lyrics to audio: {audio_file}")
+    aligned = align_lyrics_to_audio(lyrics, audio_path)
+
+    return jsonify({
+        "title": title,
+        "artist": artist,
+        "lines": aligned,
     })
 
 
