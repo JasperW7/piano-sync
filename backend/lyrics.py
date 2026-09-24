@@ -28,7 +28,7 @@ HEADERS = {
 }
 
 VERBOSE = os.getenv("LYRICS_VERBOSE", "false").lower() == "true"
-
+print(f"[lyrics] VERBOSE = {VERBOSE}")
 UTANET_INDEX_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "utanet_index.json"
 )
@@ -36,8 +36,7 @@ UTANET_INDEX_PATH = os.path.join(
 
 def _v(msg):
     if VERBOSE:
-        print(f"[lyrics] {msg}")
-
+        print(f"[lyrics] {msg}", flush=True)
 
 def _normalize(text):
     text = unicodedata.normalize("NFKC", text)
@@ -60,6 +59,28 @@ def _clean_web_text(text):
     return "\n".join(lines)
 
 
+_SECTION_HEADER_RE = re.compile(r"^\[.*?\]$")
+_CONTRIBUTOR_RE = re.compile(
+    r"^\d*\s*contributors?$|^translations?$|^lyrics$|^embed$",
+    re.IGNORECASE,
+)
+
+
+def _clean_lyrics_text(text):
+    text = text.replace("\u3000", " ").replace("\u200b", "")
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _SECTION_HEADER_RE.match(stripped):
+            continue
+        if _CONTRIBUTOR_RE.match(stripped):
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
+
+
 # ── Romanization safety net ──
 # Matches hiragana, katakana, and CJK ideographs (kanji).
 _CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
@@ -70,6 +91,12 @@ def _is_mostly_romanized(text, threshold=0.15):
         return True
     cjk_chars = len(_CJK_RE.findall(text))
     return (cjk_chars / max(len(text), 1)) < threshold
+
+
+def detect_lyrics_language(text):
+    if _is_mostly_romanized(text):
+        return "romaji"
+    return "japanese"
 
 
 def ensure_romanized(text):
@@ -98,7 +125,8 @@ def scrape_genius(url):
     lyrics = []
     for container in soup.select('div[data-lyrics-container="true"]'):
         lyrics.append(container.get_text("\n"))
-    return "\n".join(lyrics).strip()
+    raw = "\n".join(lyrics).strip()
+    return _clean_lyrics_text(raw)
 
 
 def _search_genius_raw(title, artist, require_title_match=True):
@@ -910,40 +938,96 @@ def _try_all_sources(clean_title, artist):
 
 def get_lyrics(title, artist):
     clean_title = _clean_title_for_search(title)
-    _v(f"Clean title: '{clean_title}', artist: '{artist}'")
 
-    lyrics = _try_all_sources(clean_title, artist)
+    # Try the full artist first, then progressively simpler artist names.
+    artist_variants = [artist]
 
-    # If no source matched, use Genius as a title-resolution step:
-    # the user may have searched by English translation (e.g. "Just
-    # want to touch") while sources store it under the original or
-    # romanized title (e.g. "Fureteitai Dake"). Genius often indexes
-    # translated titles, so its best match may reveal the real title.
-    if not lyrics:
-        genius_result = _search_genius_raw(clean_title, artist, require_title_match=False)
-        if genius_result:
-            # Only trust the resolution if the artist actually matches
-            result_artist = _normalize(genius_result["primary_artist"]["name"])
-            target_artist = _normalize(artist)
-            artist_ok = (
-                result_artist == target_artist
-                or target_artist in result_artist
-                or result_artist in target_artist
+    # "MIMI feat. 月" -> "MIMI"
+    base_artist = re.split(
+        r"\s+(?:feat\.?|ft\.?|featuring|with)\s+",
+        artist,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+
+    if base_artist and _normalize(base_artist) != _normalize(artist):
+        artist_variants.append(base_artist)
+
+    _v(f"Clean title: '{clean_title}', artist variants: {artist_variants}")
+
+    # Try every source with every artist variant.
+    for artist_variant in artist_variants:
+        _v(f"Trying lyrics with artist: '{artist_variant}'")
+
+        lyrics = _try_all_sources(clean_title, artist_variant)
+
+        if lyrics:
+            _v(f"Lyrics found using artist: '{artist_variant}'")
+            return _clean_lyrics_text(ensure_romanized(lyrics))
+
+    # Genius title resolution, using each artist variant.
+    for artist_variant in artist_variants:
+        genius_result = _search_genius_raw(
+            clean_title,
+            artist_variant,
+            require_title_match=False,
+        )
+
+        if not genius_result:
+            continue
+
+        result_artist = _normalize(
+            genius_result["primary_artist"]["name"]
+        )
+        target_artist = _normalize(artist_variant)
+
+        artist_ok = (
+            result_artist == target_artist
+            or target_artist in result_artist
+            or result_artist in target_artist
+        )
+
+        if not artist_ok:
+            continue
+
+        alt_title = genius_result["title"]
+
+        alt_title = re.sub(
+            r"\s*\((?:Romanized|English Translation|[^)]*translation)\)",
+            "",
+            alt_title,
+            flags=re.IGNORECASE,
+        )
+
+        alt_clean = _clean_title_for_search(alt_title)
+
+        if _normalize(alt_clean) == _normalize(clean_title):
+            continue
+
+        _v(
+            f"Retrying with Genius-resolved title: "
+            f"'{alt_clean}' using artist '{artist_variant}'"
+        )
+
+        lyrics = search_vocaloid_lyrics(
+            alt_clean,
+            artist_variant
+        )
+
+        if not lyrics:
+            lyrics = search_lyrical_nonsense(
+                alt_clean,
+                artist_variant
             )
-            if artist_ok:
-                alt_title = genius_result["title"]
-                alt_title = re.sub(r"\s*\((?:Romanized|English Translation|[^)]*translation)\)", "", alt_title, flags=re.IGNORECASE)
-                alt_clean = _clean_title_for_search(alt_title)
-                if _normalize(alt_clean) != _normalize(clean_title):
-                    _v(f"Retrying with Genius-resolved title: '{alt_clean}'")
-                    lyrics = search_vocaloid_lyrics(alt_clean, artist)
-                    if not lyrics:
-                        lyrics = search_lyrical_nonsense(alt_clean, artist)
-                    if not lyrics:
-                        lyrics = search_utanet(alt_clean, artist)
 
-    if not lyrics:
-        _v("No lyrics found from any source")
-        return None
+        if not lyrics:
+            lyrics = search_utanet(
+                alt_clean,
+                artist_variant
+            )
 
-    return ensure_romanized(lyrics)
+        if lyrics:
+            return _clean_lyrics_text(ensure_romanized(lyrics))
+
+    _v("No lyrics found from any source")
+    return None

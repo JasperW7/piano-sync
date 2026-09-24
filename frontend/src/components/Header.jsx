@@ -1,6 +1,14 @@
 import UploadPanel from "./UploadPanel";
 
-function Header({ setMidiData, setAudioUrl }) {
+function Header({
+  setMidiData,
+  setAudioUrl,
+  setAudioFile,
+  setSongInfo,
+  setLyricsStep,
+  showLyrics,
+  setShowLyrics,
+}) {
   return (
     <div className="app-header">
       <div className="logo">Piano Sync</div>
@@ -8,7 +16,18 @@ function Header({ setMidiData, setAudioUrl }) {
       <UploadPanel
         setMidiData={setMidiData}
         setAudioUrl={setAudioUrl}
+        setAudioFile={setAudioFile}
+        setSongInfo={setSongInfo}
+        setLyricsStep={setLyricsStep}
+        showLyrics={showLyrics}
       />
+
+      <button
+        className={`skip-lyrics-toggle ${!showLyrics ? "active" : ""}`}
+        onClick={() => setShowLyrics((v) => !v)}
+      >
+        {showLyrics ? "Lyrics On" : "Lyrics Off"}
+      </button>
     </div>
   );
 }

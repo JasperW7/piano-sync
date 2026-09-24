@@ -1,19 +1,23 @@
 import os
 import uuid
+import time
+import threading
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import pretty_midi
-import acoustid
-from lyrics import get_lyrics as fetch_lyrics
-from align_lyrics import align_lyrics_to_audio
+import requests as http_requests
+from lyrics import get_lyrics as fetch_lyrics, detect_lyrics_language, ensure_romanized
+from aligner import align_lyrics_to_audio
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
-
+@app.before_request
+def log_request():
+    print(f"[REQUEST] {request.method} {request.path}", flush=True)
 UPLOAD_FOLDER = "uploads"
 MIDI_FOLDER = os.path.join(UPLOAD_FOLDER, "midi")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -23,6 +27,11 @@ os.makedirs(MIDI_FOLDER, exist_ok=True)
 @app.route("/")
 def home():
     return jsonify({"message": "Backend is online"})
+
+
+@app.route("/uploads/<filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 
 # ── MP3 upload ──
@@ -94,8 +103,11 @@ def parse_midi_route():
     filename = f"{uuid.uuid4().hex}.mid"
     path = os.path.join(MIDI_FOLDER, filename)
     file.save(path)
-    notes = parse_midi(path)
-    return jsonify({"notes": notes})
+    try:
+        notes = parse_midi(path)
+        return jsonify({"notes": notes})
+    finally:
+        os.remove(path)
 
 
 @app.route("/parse/pdf", methods=["POST"])
@@ -105,16 +117,14 @@ def parse_pdf():
     }), 501
 
 
-# ── Song identification (AcoustID + MusicBrainz) ──
-ACOUSTID_API_KEY = os.getenv("ACOUSTID_API_KEY")
-FPCALC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fpcalc.exe")
-os.environ["FPCALC"] = FPCALC_PATH
+# ── Song identification (audd.io) ──
+AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN")
 
 
 @app.route("/identify-song", methods=["POST"])
 def identify_song():
-    if not ACOUSTID_API_KEY:
-        return jsonify({"error": "ACOUSTID_API_KEY not configured"}), 500
+    if not AUDD_API_TOKEN:
+        return jsonify({"error": "AUDD_API_TOKEN not configured"}), 500
 
     file = request.files["file"]
     filename = f"identify_{uuid.uuid4().hex}.mp3"
@@ -122,38 +132,55 @@ def identify_song():
     file.save(path)
 
     try:
-        results = acoustid.match(
-            ACOUSTID_API_KEY, path,
-            meta=["recordings", "releasegroups"],
-            force_fpcalc=True,
-        )
+        with open(path, "rb") as f:
+            resp = http_requests.post(
+                "https://api.audd.io/",
+                data={"api_token": AUDD_API_TOKEN, "return": "apple_music,spotify"},
+                files={"file": f},
+                timeout=30,
+            )
 
-        for score, recording_id, title, artist in results:
-            if score < 0.5:
-                continue
-            return jsonify({
-                "title": title or "",
-                "artist": artist or "",
-                "score": round(score, 3),
-                "recording_id": recording_id,
-            })
+        data = resp.json()
 
-        return jsonify({"error": "No match found"}), 404
+        if data.get("status") == "error":
+            return jsonify({"error": data.get("error", {}).get("error_message", "audd.io error")}), 500
 
-    except acoustid.FingerprintGenerationError as e:
-        return jsonify({"error": f"Fingerprint failed: {str(e)}"}), 500
-    except acoustid.WebServiceError as e:
-        return jsonify({"error": f"AcoustID lookup failed: {str(e)}"}), 500
+        result = data.get("result")
+        if not result:
+            return jsonify({"error": "No match found"}), 404
+
+        return jsonify({
+            "title": result.get("title", ""),
+            "artist": result.get("artist", ""),
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Identification failed: {str(e)}"}), 500
     finally:
         os.remove(path)
 
 
-# ── Lyrics (unchanged) ──
+# ── Lyrics ──
 @app.route("/lyrics", methods=["POST"])
 def get_lyrics_route():
     data = request.json
-    title = data["title"]
-    artist = data["artist"]
+    lyrics_text = data.get("lyrics_text")
+
+    if lyrics_text:
+        detected = detect_lyrics_language(lyrics_text)
+        romaji = lyrics_text if detected == "romaji" else ensure_romanized(lyrics_text)
+        return jsonify({
+            "title": data.get("title", ""),
+            "artist": data.get("artist", ""),
+            "lyrics": romaji,
+            "lyrics_original": lyrics_text if detected == "japanese" else None,
+            "detected_language": detected,
+        })
+
+    title = data.get("title")
+    artist = data.get("artist")
+    if not title or not artist:
+        return jsonify({"error": "title and artist are required (or provide lyrics_text)"}), 400
 
     print(f"Searching lyrics for: {title} — {artist}")
     lyrics = fetch_lyrics(title, artist)
@@ -164,16 +191,16 @@ def get_lyrics_route():
     return jsonify({
         "title": title,
         "artist": artist,
-        "lyrics": lyrics
+        "lyrics": lyrics,
+        "lyrics_original": None,
+        "detected_language": "romaji",
     })
 
 
-# ── Synced lyrics (Whisper alignment) ──
+# ── Synced lyrics (MFA alignment with Whisper fallback) ──
 @app.route("/lyrics/synced", methods=["POST"])
 def get_synced_lyrics():
     data = request.json
-    title = data.get("title")
-    artist = data.get("artist")
     audio_file = data.get("audio_file")
 
     if not audio_file:
@@ -183,23 +210,47 @@ def get_synced_lyrics():
     if not os.path.exists(audio_path):
         return jsonify({"error": "Audio file not found"}), 404
 
-    if not title or not artist:
-        return jsonify({"error": "title and artist are required"}), 400
+    lyrics_text = data.get("lyrics_text")
 
-    print(f"Fetching synced lyrics for: {title} — {artist}")
-    lyrics = fetch_lyrics(title, artist)
+    if lyrics_text:
+        lyrics_for_align = lyrics_text
+    else:
+        title = data.get("title")
+        artist = data.get("artist")
+        if not title or not artist:
+            return jsonify({"error": "title and artist required (or provide lyrics_text)"}), 400
 
-    if lyrics is None:
-        return jsonify({"error": "Lyrics not found"}), 404
+        print(f"Fetching lyrics for: {title} — {artist}")
+        lyrics_for_align = fetch_lyrics(title, artist)
+        if lyrics_for_align is None:
+            return jsonify({"error": "Lyrics not found"}), 404
 
     print(f"Aligning lyrics to audio: {audio_file}")
-    aligned = align_lyrics_to_audio(lyrics, audio_path)
-
+    aligned = align_lyrics_to_audio(lyrics_for_align, audio_path)
     return jsonify({
-        "title": title,
-        "artist": artist,
+        "title": data.get("title", ""),
+        "artist": data.get("artist", ""),
         "lines": aligned,
+        "alignment_method": "forced_align",
     })
+
+
+def cleanup_uploads():
+    max_age = 3600
+    while True:
+        now = time.time()
+        for root, dirs, files in os.walk(UPLOAD_FOLDER):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                try:
+                    if now - os.path.getmtime(fpath) > max_age:
+                        os.remove(fpath)
+                except OSError:
+                    pass
+        time.sleep(1800)
+
+
+threading.Thread(target=cleanup_uploads, daemon=True).start()
 
 
 if __name__ == "__main__":

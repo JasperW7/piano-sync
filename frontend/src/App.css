@@ -106,6 +106,28 @@ button:active {
   text-overflow: ellipsis;
 }
 
+.skip-lyrics-toggle {
+  display: flex;
+  align-items: center;
+  background: #1f232b;
+  border: 1px solid #2c3038;
+  color: #cfd4dd;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.skip-lyrics-toggle:hover {
+  background: #262b34;
+  border-color: #3a3f4b;
+}
+.skip-lyrics-toggle.active {
+  border-color: rgba(244, 67, 54, 0.5);
+  background: rgba(244, 67, 54, 0.08);
+  color: #ffcdd2;
+}
+
 /* ---------- Workspace / Editor ---------- */
 .workspace {
   flex: 1;
@@ -122,6 +144,19 @@ button:active {
   width: 0;
   height: 0;
   overflow: hidden;
+}
+
+.synth-loading {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 100;
 }
 
 .editor {
@@ -141,11 +176,31 @@ button:active {
 
 /* Piano roll takes up the majority of the page */
 .piano-roll-container {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
   padding: 10px 10px 0;
   box-sizing: border-box;
+}
+
+.note-label-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  background: rgba(30,30,40,0.8);
+  color: rgba(255,255,255,0.8);
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.note-label-toggle:hover {
+  background: rgba(50,50,60,0.9);
+  color: #fff;
 }
 
 .piano-roll-canvas {
@@ -182,6 +237,19 @@ button:active {
 .timeline-bar.dragging {
   cursor: grabbing;
 }
+
+.loop-marker {
+  position: absolute;
+  top: -7px;
+  width: 2px;
+  height: 20px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 2;
+  border-radius: 1px;
+}
+.loop-marker-a { background: #4caf50; }
+.loop-marker-b { background: #f44336; }
 
 .timeline-fill {
   position: absolute;
@@ -378,4 +446,170 @@ button:active {
   font-size: 11px;
   color: #9ea7b8;
   margin-bottom: 6px;
+}
+
+/* ---------- Lyrics Panel ---------- */
+.lyrics-panel {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  background: #1b1d23;
+  border: 1px solid #2c3038;
+  border-radius: 14px;
+  padding: 14px;
+  margin-right: 14px;
+
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,.35);
+}
+
+.lyrics-panel-header {
+  font-weight: 600;
+  font-size: 14px;
+  color: #cfd4dd;
+}
+
+.lyrics-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lyrics-input {
+  background: #14161b;
+  border: 1px solid #2c3038;
+  border-radius: 8px;
+  color: #cfd4dd;
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.lyrics-input:focus {
+  border-color: #3b82f6;
+}
+.lyrics-input:disabled {
+  opacity: 0.5;
+}
+
+.lyrics-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.lyrics-btn {
+  flex: 1;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: #3b82f6;
+  color: white;
+  transition: .15s;
+}
+.lyrics-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+.lyrics-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.lyrics-btn-secondary {
+  background: #262b34;
+  color: #cfd4dd;
+}
+.lyrics-btn-secondary:hover:not(:disabled) {
+  background: #323844;
+}
+
+.lyrics-textarea {
+  width: 100%;
+  min-height: 80px;
+  background: #14161b;
+  border: 1px solid #2c3038;
+  border-radius: 8px;
+  color: #cfd4dd;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+.lyrics-textarea:focus {
+  border-color: #3b82f6;
+}
+
+.lyrics-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lyrics-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lyrics-lang-badge {
+  display: inline-block;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+.lyrics-note {
+  font-size: 11px;
+  color: #9ea7b8;
+}
+
+.lyrics-status {
+  font-size: 12px;
+  color: #60a5fa;
+}
+
+.lyrics-error {
+  font-size: 12px;
+  color: #f87171;
+}
+
+.lyrics-synced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lyrics-synced-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.lyrics-synced-line {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+.lyrics-time {
+  color: #9ea7b8;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.lyrics-text {
+  color: #cfd4dd;
 }

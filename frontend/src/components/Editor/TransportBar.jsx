@@ -2,20 +2,32 @@ import { useState, useRef, useEffect } from "react";
 
 function TransportBar({
   audioRef,
+  audioContextRef,
+  midiOnly,
   offset,
   speed,
   setOffset,
   setSpeed,
+  loopA,
+  loopB,
 }) {
   const fillRef = useRef(null);
   const thumbRef = useRef(null);
   const currentLabelRef = useRef(null);
   const durationLabelRef = useRef(null);
   const timelineRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+
+  const loopARef = useRef(loopA);
+  const loopBRef = useRef(loopB);
+  loopARef.current = loopA;
+  loopBRef.current = loopB;
 
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
+  const volumeRef = useRef(1);
   const [openMenu, setOpenMenu] = useState(null);
   const closeTimeout = useRef(null);
 
@@ -28,6 +40,35 @@ function TransportBar({
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
+  // ----- Web Audio API for volume > 100% -----
+  const prevAudioRef = useRef(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const changed = prevAudioRef.current !== audio;
+    prevAudioRef.current = audio;
+
+    if (audioContextRef.current && !changed) return;
+
+    if (audio.isMidiPlayer) {
+      audioContextRef.current = audio.audioContext;
+      gainNodeRef.current = audio.gainNode;
+    } else {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = ctx.createMediaElementSource(audio);
+      const gain = ctx.createGain();
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      audioContextRef.current = ctx;
+      sourceNodeRef.current = source;
+      gainNodeRef.current = gain;
+    }
+
+    gainNodeRef.current.gain.value = volumeRef.current;
+  }, [audioRef]);
+
   // ----- slider progress loop -----
   useEffect(() => {
     let animationId;
@@ -38,6 +79,12 @@ function TransportBar({
       if (audio) {
         const current = audio.currentTime || 0;
         const duration = audio.duration || 0;
+
+        const a = loopARef.current;
+        const b = loopBRef.current;
+        if (a != null && b != null && current >= b && !audio.paused) {
+          audio.currentTime = a;
+        }
 
         const percent = duration ? (current / duration) * 100 : 0;
 
@@ -79,6 +126,38 @@ function TransportBar({
     };
   }, [audioRef]);
 
+  // ----- mute during seeks to prevent buzzing -----
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onSeeking = () => {
+      const gain = gainNodeRef.current;
+      const ctx = audioContextRef.current;
+      if (gain && ctx) {
+        gain.gain.cancelScheduledValues(ctx.currentTime);
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+      }
+    };
+
+    const onSeeked = () => {
+      const gain = gainNodeRef.current;
+      const ctx = audioContextRef.current;
+      if (gain && ctx) {
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(volumeRef.current, ctx.currentTime + 0.05);
+      }
+    };
+
+    audio.addEventListener("seeking", onSeeking);
+    audio.addEventListener("seeked", onSeeked);
+
+    return () => {
+      audio.removeEventListener("seeking", onSeeking);
+      audio.removeEventListener("seeked", onSeeked);
+    };
+  }, [audioRef]);
+
   const seek = (clientX) => {
     if (!audioRef.current || !timelineRef.current) return;
 
@@ -114,8 +193,12 @@ function TransportBar({
   const togglePlay = () => {
     if (!audioRef.current) return;
 
+    if (audioContextRef.current?.state === "suspended") {
+      audioContextRef.current.resume();
+    }
+
     if (audioRef.current.paused) {
-      audioRef.current.play();
+      audioRef.current.play().catch(() => {});
     } else {
       audioRef.current.pause();
     }
@@ -142,6 +225,16 @@ function TransportBar({
         }}
       >
         <div className={`timeline-bar ${isDragging ? "dragging" : ""}`} />
+        {loopA != null && audioRef.current?.duration > 0 && (
+          <div className="loop-marker loop-marker-a" style={{
+            left: `${(loopA / audioRef.current.duration) * 100}%`,
+          }} />
+        )}
+        {loopB != null && audioRef.current?.duration > 0 && (
+          <div className="loop-marker loop-marker-b" style={{
+            left: `${(loopB / audioRef.current.duration) * 100}%`,
+          }} />
+        )}
         <div ref={fillRef} className="timeline-fill" />
         <div ref={thumbRef} className="timeline-thumb" />
       </div>
@@ -202,32 +295,34 @@ function TransportBar({
             )}
           </div>
 
-          {/* OFFSET */}
-          <div
-            className="icon-group"
-            onMouseEnter={() => handleEnter("offset")}
-            onMouseLeave={handleLeave}
-          >
-            <button>⏱</button>
+          {/* OFFSET (hidden in MIDI-only mode) */}
+          {!midiOnly && (
+            <div
+              className="icon-group"
+              onMouseEnter={() => handleEnter("offset")}
+              onMouseLeave={handleLeave}
+            >
+              <button>⏱</button>
 
-            {openMenu === "offset" && (
-              <div className="dropdown vertical">
-                <label>Offset</label>
+              {openMenu === "offset" && (
+                <div className="dropdown vertical">
+                  <label>Offset</label>
 
-                <div className="slider-vertical">
-                  <input
-                    type="range"
-                    min="-5"
-                    max="5"
-                    step="0.1"
-                    value={offset}
-                    onChange={(e) => setOffset(Number(e.target.value))}
-                  />
-                  <div className="value">{offset.toFixed(1)}s</div>
+                  <div className="slider-vertical">
+                    <input
+                      type="range"
+                      min="-5"
+                      max="5"
+                      step="0.1"
+                      value={offset}
+                      onChange={(e) => setOffset(Number(e.target.value))}
+                    />
+                    <div className="value">{offset.toFixed(1)}s</div>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* VOLUME */}
           <div
@@ -245,14 +340,15 @@ function TransportBar({
                   <input
                     type="range"
                     min="0"
-                    max="1"
+                    max="2"
                     step="0.01"
                     value={volume}
                     onInput={(e) => {
                       const v = Number(e.target.value);
                       setVolume(v);
-                      if (audioRef.current) {
-                        audioRef.current.volume = v;
+                      volumeRef.current = v;
+                      if (gainNodeRef.current) {
+                        gainNodeRef.current.gain.value = v;
                       }
                     }}
                   />

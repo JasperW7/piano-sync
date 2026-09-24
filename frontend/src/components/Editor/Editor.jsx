@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import PianoRollCanvas from "./PianoRollCanvas";
 import TransportBar from "./TransportBar";
@@ -6,11 +6,18 @@ import TransportBar from "./TransportBar";
 function Editor({
   midiData,
   audioRef,
+  midiOnly,
   offset,
   speed,
   setOffset,
   setSpeed,
+  loopA,
+  loopB,
+  setLoopA,
+  setLoopB,
 }) {
+  const audioContextRef = useRef(null);
+
   // Spacebar play/pause
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -24,8 +31,12 @@ function Editor({
         case "Space":
         e.preventDefault();
 
+        if (audioContextRef.current?.state === "suspended") {
+            audioContextRef.current.resume();
+        }
+
         if (audioRef.current.paused) {
-            audioRef.current.play();
+            audioRef.current.play().catch(() => {});
         } else {
             audioRef.current.pause();
         }
@@ -47,6 +58,32 @@ function Editor({
         );
         break;
 
+        case "BracketLeft":
+        e.preventDefault();
+        setLoopA(audioRef.current.currentTime);
+        break;
+
+        case "BracketRight":
+        e.preventDefault();
+        setLoopB(audioRef.current.currentTime);
+        break;
+
+        case "Backspace":
+        e.preventDefault();
+        setLoopA(null);
+        setLoopB(null);
+        break;
+
+        case "Digit0":
+        case "Numpad0":
+        e.preventDefault();
+        if (loopA != null && !audioRef.current.paused) {
+            audioRef.current.currentTime = loopA;
+        } else {
+            audioRef.current.currentTime = 0;
+        }
+        break;
+
         default:
         break;
     }
@@ -55,25 +92,38 @@ function Editor({
     window.addEventListener("keydown", onKeyDown);
 
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [audioRef]);
+  }, [audioRef, loopA]);
+
+  const [showNoteLabels, setShowNoteLabels] = useState(true);
 
   return (
     <div className="editor">
 
       <div className="piano-roll-container">
+        <button
+          className="note-label-toggle"
+          onClick={() => setShowNoteLabels(v => !v)}
+        >
+          {showNoteLabels ? "Hide Notes" : "Show Notes"}
+        </button>
         <PianoRollCanvas
           midiData={midiData}
           audioRef={audioRef}
           offset={offset}
+          showNoteLabels={showNoteLabels}
         />
       </div>
 
       <TransportBar
         audioRef={audioRef}
+        audioContextRef={audioContextRef}
+        midiOnly={midiOnly}
         offset={offset}
         speed={speed}
         setOffset={setOffset}
         setSpeed={setSpeed}
+        loopA={loopA}
+        loopB={loopB}
       />
 
     </div>

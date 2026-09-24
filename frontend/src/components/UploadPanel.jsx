@@ -1,60 +1,63 @@
 import axios from "axios";
 import { useState } from "react";
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
-function UploadPanel({ setMidiData, setAudioUrl }) {
+
+function UploadPanel({
+  setMidiData,
+  setAudioUrl,
+  setAudioFile,
+  setSongInfo,
+  setLyricsStep,
+  showLyrics,
+}) {
   const [mp3Name, setMp3Name] = useState("");
   const [midiName, setMidiName] = useState("");
 
   const uploadFile = async (file, type) => {
     try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        let endpoint;
-
-        if (type === "mp3") {
-          endpoint = `${API}/upload/audio`;
-        }
-        else if (type === "midi") {
-          endpoint = `${API}/parse/midi`;
-        }
-        else {
-          endpoint = `${API}/parse/pdf`;
-        }
-
-        const res = await axios.post(endpoint, formData);
-
-        if (type === "mp3") {
-            setAudioUrl(URL.createObjectURL(file));
-            setMp3Name(file.name);
-        }
-        else {
-            console.log("PDF/MIDI response:", res.data);
-
-            setMidiData(res.data.notes);
-            setMidiName(file.name);
-        }
-
-    } catch (err) {
-        console.error(err);
-    }
-  };
-  const identifySong = async (file) => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await axios.post(
-          `${API}/identify-song`,
-          formData
-      );
+      let endpoint;
+      if (type === "mp3") {
+        endpoint = `${API}/upload/audio`;
+      } else if (type === "midi") {
+        endpoint = `${API}/parse/midi`;
+      } else {
+        endpoint = `${API}/parse/pdf`;
+      }
 
-      console.log(res.data);
+      const res = await axios.post(endpoint, formData);
+
+      if (type === "mp3") {
+        return res.data.file;
+      } else {
+        setMidiData(res.data.notes);
+        setMidiName(file.name);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const identifySong = async (file) => {
+    try {
+      setLyricsStep("identifying");
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await axios.post(`${API}/identify-song`, formData);
+      setSongInfo({ title: res.data.title, artist: res.data.artist });
+      setLyricsStep(null);
+    } catch (err) {
+      console.error("Song identification error:", err);
+      setSongInfo(null);
+      setLyricsStep(null);
+    }
   };
 
   return (
     <div className="upload-panel-inline">
-
-      {/* MP3 */}
       <button
         type="button"
         className={`upload-chip ${mp3Name ? "loaded" : ""}`}
@@ -66,22 +69,25 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           type="file"
           accept=".mp3"
           hidden
-          onChange={(e) => {
+          onChange={async (e) => {
             const file = e.target.files[0];
             if (file) {
-              uploadFile(file, "mp3");
-              identifySong(file);
+              setAudioUrl(URL.createObjectURL(file));
+              setMp3Name(file.name);
+              const serverFile = await uploadFile(file, "mp3");
+              if (serverFile) setAudioFile(serverFile);
+              if (showLyrics) {
+                await identifySong(file);
+              }
             }
           }}
         />
-
         <span className="upload-chip-icon">🎵</span>
         <span className="upload-chip-label">
           {mp3Name || "Audio Track"}
         </span>
       </button>
 
-      {/* MIDI */}
       <button
         type="button"
         className={`upload-chip ${midiName ? "loaded" : ""}`}
@@ -95,21 +101,16 @@ function UploadPanel({ setMidiData, setAudioUrl }) {
           hidden
           onChange={(e) => {
             const file = e.target.files[0];
-
             if (!file) return;
-
             const isPdf = file.name.toLowerCase().endsWith(".pdf");
-
             uploadFile(file, isPdf ? "pdf" : "midi");
           }}
         />
-
         <span className="upload-chip-icon">🎹</span>
         <span className="upload-chip-label">
           {midiName || "MIDI File"}
         </span>
       </button>
-
     </div>
   );
 }

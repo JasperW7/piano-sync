@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 
-function PianoRollCanvas({ midiData, audioRef, offset }) {
+const NOTE_NAMES = ["A","A#","B","C","C#","D","D#","E","F","F#","G","G#"];
+
+function PianoRollCanvas({ midiData, audioRef, offset, showNoteLabels }) {
   const canvasRef = useRef(null);
 
   // Persistent indices (IMPORTANT: must be outside render loop)
@@ -246,6 +248,15 @@ function PianoRollCanvas({ midiData, audioRef, offset }) {
           drawHeight,
           r
         );
+
+        if (showNoteLabels && drawHeight > 14) {
+          const name = NOTE_NAMES[(note.note - 21) % 12];
+          ctx.fillStyle = "rgba(0,0,0,0.85)";
+          ctx.font = `bold ${Math.min(11, width * 0.65)}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(name, x + width / 2, y + drawHeight - 3);
+        }
       }
 
       // Play line
@@ -438,7 +449,7 @@ function PianoRollCanvas({ midiData, audioRef, offset }) {
     render();
 
     return () => cancelAnimationFrame(animationId);
-  }, [midiData, audioRef, offset]);
+  }, [midiData, audioRef, offset, showNoteLabels]);
 
   return (
     <canvas
