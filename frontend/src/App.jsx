@@ -12,6 +12,7 @@ function App() {
 
   const [audioUrl, setAudioUrl] = useState(null);
   const [midiData, setMidiData] = useState([]);
+  const [tempo, setTempo] = useState(120);
 
   const [offset, setOffset] = useState(0);
   const [speed, setSpeed] = useState(1);
@@ -65,6 +66,7 @@ function App() {
 
       <Header
         setMidiData={setMidiData}
+        setTempo={setTempo}
         setAudioUrl={setAudioUrl}
         setAudioFile={setAudioFile}
         setSongInfo={setSongInfo}
@@ -109,6 +111,8 @@ function App() {
 
         <Editor
           midiData={midiData}
+          setMidiData={setMidiData}
+          tempo={tempo}
           audioRef={effectiveAudioRef}
           midiOnly={midiOnly}
           offset={offset}

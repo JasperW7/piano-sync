@@ -66,5 +66,14 @@ export default function useMidiSynth(midiData, audioUrl) {
     };
   }, [midiOnly, midiData]);
 
+  const prevMidiDataRef = useRef(midiData);
+  useEffect(() => {
+    if (prevMidiDataRef.current === midiData) return;
+    prevMidiDataRef.current = midiData;
+    if (midiOnly && midiPlayerRef.current && synthReady) {
+      midiPlayerRef.current.updateMidiData(midiData);
+    }
+  }, [midiData, midiOnly, synthReady]);
+
   return { midiPlayerRef, midiOnly, synthReady, synthLoading };
 }

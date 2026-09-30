@@ -2,6 +2,7 @@ import UploadPanel from "./UploadPanel";
 
 function Header({
   setMidiData,
+  setTempo,
   setAudioUrl,
   setAudioFile,
   setSongInfo,
@@ -15,6 +16,7 @@ function Header({
 
       <UploadPanel
         setMidiData={setMidiData}
+        setTempo={setTempo}
         setAudioUrl={setAudioUrl}
         setAudioFile={setAudioFile}
         setSongInfo={setSongInfo}

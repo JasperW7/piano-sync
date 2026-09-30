@@ -60,6 +60,9 @@ def parse_midi(file_path):
     notes = []
     piano_instruments = [inst for inst in midi.instruments if not inst.is_drum]
 
+    tempo_changes = midi.get_tempo_changes()
+    tempo = float(tempo_changes[1][0]) if len(tempo_changes[1]) > 0 else 120.0
+
     if len(piano_instruments) >= 2:
         avg_pitches = []
         for inst in piano_instruments:
@@ -94,7 +97,7 @@ def parse_midi(file_path):
             })
 
     notes.sort(key=lambda n: n["start"])
-    return notes
+    return notes, tempo
 
 
 @app.route("/parse/midi", methods=["POST"])
@@ -104,10 +107,51 @@ def parse_midi_route():
     path = os.path.join(MIDI_FOLDER, filename)
     file.save(path)
     try:
-        notes = parse_midi(path)
-        return jsonify({"notes": notes})
+        notes, tempo = parse_midi(path)
+        return jsonify({"notes": notes, "tempo": tempo})
     finally:
         os.remove(path)
+
+
+@app.route("/export/midi", methods=["POST"])
+def export_midi():
+    data = request.json
+    notes = data.get("notes", [])
+    tempo = data.get("tempo", 120.0)
+
+    midi = pretty_midi.PrettyMIDI(initial_tempo=tempo)
+
+    tracks = {}
+    for n in notes:
+        track_id = n.get("track", 0)
+        if track_id not in tracks:
+            tracks[track_id] = []
+        tracks[track_id].append(n)
+
+    for track_id in sorted(tracks.keys()):
+        instrument = pretty_midi.Instrument(program=0, name=f"Track {track_id}")
+        for n in tracks[track_id]:
+            note = pretty_midi.Note(
+                velocity=n.get("velocity", 80),
+                pitch=n["note"],
+                start=n["start"],
+                end=n["start"] + n["duration"],
+            )
+            instrument.notes.append(note)
+        midi.instruments.append(instrument)
+
+    filename = f"export_{uuid.uuid4().hex}.mid"
+    path = os.path.join(MIDI_FOLDER, filename)
+    midi.write(path)
+
+    try:
+        return send_from_directory(
+            MIDI_FOLDER, filename,
+            as_attachment=True,
+            download_name="edited.mid",
+        )
+    finally:
+        threading.Timer(5, lambda: os.remove(path) if os.path.exists(path) else None).start()
 
 
 @app.route("/parse/pdf", methods=["POST"])

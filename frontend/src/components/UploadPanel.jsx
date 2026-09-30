@@ -4,6 +4,7 @@ const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 function UploadPanel({
   setMidiData,
+  setTempo,
   setAudioUrl,
   setAudioFile,
   setSongInfo,
@@ -32,7 +33,9 @@ function UploadPanel({
       if (type === "mp3") {
         return res.data.file;
       } else {
-        setMidiData(res.data.notes);
+        const notes = res.data.notes.map((n, i) => ({ ...n, id: i }));
+        setMidiData(notes);
+        if (res.data.tempo) setTempo(res.data.tempo);
         setMidiName(file.name);
       }
     } catch (err) {

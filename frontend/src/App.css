@@ -184,11 +184,46 @@ button:active {
   box-sizing: border-box;
 }
 
-.note-label-toggle {
+.canvas-toolbar-left {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+}
+
+.hand-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  background: rgba(30,30,40,0.8);
+  color: rgba(255,255,255,0.4);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hand-toggle:hover {
+  background: rgba(50,50,60,0.9);
+}
+
+.canvas-toolbar-right {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 10;
+  display: flex;
+  gap: 6px;
+}
+
+.note-label-toggle,
+.save-midi-btn {
   padding: 4px 10px;
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 6px;
@@ -198,7 +233,8 @@ button:active {
   cursor: pointer;
   backdrop-filter: blur(4px);
 }
-.note-label-toggle:hover {
+.note-label-toggle:hover,
+.save-midi-btn:hover {
   background: rgba(50,50,60,0.9);
   color: #fff;
 }
